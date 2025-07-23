@@ -2,6 +2,8 @@ import time
 import argparse
 from decimal import Decimal
 from typing import List, Dict, Tuple, Optional
+from fastapi import APIRouter
+import random
 
 from app.routing.dex_clients.base import DexClient
 from app.routing.dex_clients.zerox import ZeroXClient
@@ -78,6 +80,82 @@ class DCAStrategy:
             if i < intervals:
                 time.sleep(delay_seconds)
         print(f"Completed DCA for {to_symbol.upper()}.\n")
+
+# API Router for DCA Strategy
+router = APIRouter()
+
+@router.get("/api/dca_data")
+def get_dca_data():
+    """
+    DCA stratejisi verilerini döndürür
+    """
+    try:
+        try:
+            usd_prices = fetch_all_usd_prices()
+        except Exception as e:
+            print(f"[ERROR] DCA data fetch failed: {e}")
+            # CoinGecko rate limit durumunda fallback fiyatlar kullan
+            usd_prices = {
+                "bitcoin": 118000.0,
+                "ethereum": 3650.0,
+                "chainlink": 19.0,
+                "uniswap": 10.5,
+                "aave": 301.0,
+            }
+
+        # DCA stratejisi için örnek veriler
+        dca_strategies = []
+
+        # Popüler tokenlar için DCA stratejileri oluştur
+        popular_tokens = ["eth", "btc", "link", "uni", "aave"]
+
+        # Token ismi mapping'i
+        token_mapping = {
+            "eth": "ethereum",
+            "btc": "bitcoin",
+            "link": "chainlink",
+            "uni": "uniswap",
+            "aave": "aave"
+        }
+
+        for token in popular_tokens:
+            # Token mapping kullanarak doğru ismi bul
+            coingecko_name = token_mapping.get(token, token)
+            if coingecko_name in usd_prices:
+                current_price = float(usd_prices[coingecko_name])
+
+                # DCA parametreleri
+                total_investment = random.uniform(1000, 10000)
+                intervals_completed = random.randint(5, 20)
+                total_intervals = random.randint(intervals_completed + 1, 30)  # En az 1 fazla olsun
+                avg_buy_price = current_price * random.uniform(0.85, 1.15)
+                total_tokens_bought = total_investment / avg_buy_price
+                current_value = total_tokens_bought * current_price
+                pnl = current_value - total_investment
+                pnl_percentage = (pnl / total_investment) * 100
+
+                dca_strategies.append({
+                    "id": len(dca_strategies) + 1,
+                    "token": token.upper(),
+                    "status": "active" if intervals_completed < total_intervals else "completed",
+                    "total_investment": round(total_investment, 2),
+                    "intervals_completed": intervals_completed,
+                    "total_intervals": total_intervals,
+                    "avg_buy_price": round(avg_buy_price, 4),
+                    "current_price": round(current_price, 4),
+                    "total_tokens": round(total_tokens_bought, 6),
+                    "current_value": round(current_value, 2),
+                    "pnl": round(pnl, 2),
+                    "pnl_percentage": round(pnl_percentage, 2),
+                    "next_buy_in": random.randint(1, 24) if intervals_completed < total_intervals else None,
+                    "frequency": "daily"
+                })
+
+        return {"strategies": dca_strategies}
+
+    except Exception as e:
+        print(f"[ERROR] DCA data fetch failed: {e}")
+        return {"strategies": []}
 
 
 def main():
