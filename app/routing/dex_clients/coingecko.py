@@ -3,7 +3,6 @@ from decimal import Decimal
 from typing import Tuple, Dict
 
 from app.routing.dex_clients.base import DexClient
-from app.strategies.arbitrage_and_twap import TOKEN_INFO
 
 def fetch_top_100_tokens() -> list:
     url = "https://api.coingecko.com/api/v3/coins/markets"
@@ -18,6 +17,10 @@ def fetch_top_100_tokens() -> list:
     response.raise_for_status()
     return response.json()
 
+def get_token_info() -> Dict[str, Dict]:
+    from app.strategies.arbitrage_and_twap import TOKEN_INFO
+    return TOKEN_INFO
+
 class CoingeckoClient(DexClient):
     name = "Coingecko"
     
@@ -31,7 +34,8 @@ class CoingeckoClient(DexClient):
             self.prices = { item["symbol"].lower(): Decimal(str(item["current_price"])) for item in data }
 
     def _resolve(self, symbol: str) -> Tuple[str, int]:
-        info = TOKEN_INFO[symbol.lower()]
+        token_info = get_token_info()
+        info = token_info[symbol.lower()]
         return info["address"], info["decimals"]
 
     def get_quote(self, from_symbol: str, to_symbol: str, amount: Decimal) -> Decimal:
