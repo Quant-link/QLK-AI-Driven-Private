@@ -1,6 +1,7 @@
 import requests
 import random
 from app.config.tokens import TOKENS
+import math
 
 def fetch_token_data(symbol):
     if symbol not in TOKENS:
@@ -8,14 +9,12 @@ def fetch_token_data(symbol):
 
     token_info = TOKENS[symbol]
 
-    # === 1. Eğer adres varsa (manuel token) ===
     if "address" in token_info:
         chain = token_info["chain"]
         address = token_info["address"]
         url = f"https://api.dexscreener.com/latest/dex/pairs/{chain}/{address}"
         is_pairs_api = True
 
-    # === 2. Eğer sadece Coingecko ID varsa (slug üzerinden search) ===
     elif "id" in token_info:
         search_term = token_info["id"]
         url = f"https://api.dexscreener.com/latest/dex/search?q={search_term}"
@@ -48,7 +47,7 @@ def fetch_token_data(symbol):
             return []
 
     results = []
-    for pair in pairs[:3]:  # sadece ilk 3 pariteyi al
+    for pair in pairs[:3]:  
         try:
             results.append({
                 "symbol": symbol.upper(),
@@ -63,3 +62,40 @@ def fetch_token_data(symbol):
             continue
 
     return results
+
+def fetch_gas_costs() -> dict:
+    try:
+        eth_resp = requests.get("https://api.etherscan.io/api?module=gastracker&action=gasoracle", timeout=3)
+        eth_data = eth_resp.json()
+        eth = {
+            "standard": float(eth_data["result"]["SafeGasPrice"]),
+            "fast": float(eth_data["result"]["ProposeGasPrice"]),
+            "instant": float(eth_data["result"]["FastGasPrice"]),
+        }
+
+        return {
+            "ethereum": eth,
+            "bsc": {"standard": 5, "fast": 6, "instant": 8},
+            "polygon": {"standard": 35, "fast": 45, "instant": 60}
+        }
+
+    except Exception as e:
+        print(f"[ERROR] Gas API failed: {e}")
+        return {
+            "ethereum": {"standard": 25, "fast": 30, "instant": 40},
+            "bsc": {"standard": 5, "fast": 6, "instant": 8},
+            "polygon": {"standard": 35, "fast": 45, "instant": 60}
+        }
+    
+def calculate_slippage(trade_size_usd: float, liquidity_usd: float) -> float:
+    """
+    Calculates estimated slippage (%) for a given trade size and liquidity.
+    """
+    if liquidity_usd <= 0:
+        return 100.0  
+    
+    slippage_factor = math.sqrt(trade_size_usd / liquidity_usd)
+    volatility_adjustment = 1.2  
+
+    slippage_pct = slippage_factor * volatility_adjustment * 100
+    return min(slippage_pct, 50.0)  
